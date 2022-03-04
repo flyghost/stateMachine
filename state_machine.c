@@ -47,9 +47,7 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
         return STATEM_ERR_STATE_RECHED;
     }
 
-    /* 如果这个状态没有儿子，不用转移了,那他自己是儿子吗 */
-
-    // 没有转换函数 且
+    // 没有转换函数 且父状态为空
     if ((!fsm->state_current->transition_nums) && (!fsm->state_current->state_parent))
     {
         return STATEM_STATE_NOCHANGE;
@@ -97,7 +95,7 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
         // 执行转换函数
         if (transition->action)
         {
-            transition->action(fsm->state_current->data, event, state_next->data);
+            transition->action(fsm->state_current->data, event, state_next->data);      // 状态不变也会调用这个接口
         }
 
         // 保存上一个状态
