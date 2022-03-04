@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2019, redoc
- *
- * SPDX-License-Identifier: Apache-2.0
- *
- * Change Logs:
- * Date           Author       Notes
- * 2021-01-12     redoc        the first version
- */
-
 #define LOG_TAG "state.post"
 #define LOG_LVL LOG_LVL_DBG
 

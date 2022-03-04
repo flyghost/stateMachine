@@ -71,27 +71,17 @@
 #include <stdbool.h>
 
 /**
- * \brief Event
- *
- * Events trigger transitions from a state to another. Event types are defined
- * by the user. Any event may optionally contain a \ref #event::data
- * "payload".
- *
- * \sa state
- * \sa transition
+ * @brief 事件触发从一个状态到另一个状态的转换。 事件类型由用户定义。 任何事件都可以选择包含一个 \ref #event::data "payload"
+ * 
  */
 struct event
 {
-    /** \brief Type of event. Defined by user. */
-    int type; // 具体的事件
-    /**
-     * \brief Event payload.
-     *
-     * How this is used is entirely up to the user. This data
-     * is always passed together with #type in order to make it possible to
-     * always cast the data correctly.
-     */
-    void *data; // 事件的参数
+    // 事件类型，用户定义
+    int type;
+
+    // 事件实体，一般用来描述该类型下具体什么事件
+    // 如何使用完全取决于用户。 此数据始终与#type 一起传递，以便始终正确转换数据
+    void *data;
 };
 
 struct state;
@@ -153,54 +143,31 @@ struct state;
  */
 struct transition
 {
-    /** \brief The event that will trigger this transition. */
-    int event_type; // 当前状态下需要哪个事件来触发，导致状态发生变化
+    // 触发transition的事件
+    int event_type;
+
+    // guard函数的参数
+    void *condition;
 
     /**
-     * \brief Condition that event must fulfil
-     *
-     * This variable will be passed to the #guard (if #guard is non-NULL) and
-     * may be used as a condition that the incoming event's data must fulfil in
-     * order for the transition to be performed. By using this variable, the
-     * number of #guard functions can be minimised by making them more general.
-     */
-    void *condition; // 触发转化，是否满足转化的条件
-    /**
-     * \brief Check if data passed with event fulfils a condition
-     *
-     * A transition may be conditional. If so, this function, if non-NULL, will
-     * be called. Its first argument will be supplied with #condition, which
-     * can be compared against the \ref event::data "payload" in the #event.
-     * The user may choose to use this argument or not. Only if the result is
-     * true, the transition will take place.
-     *
-     * \param condition event (data) to compare the incoming event against.
-     * \param event the event passed to the state machine.
-     *
-     * \returns true if the event's data fulfils the condition, otherwise false.
+     * @brief 是否允许转换
+     * 
      */
     bool (*guard)(void *condition, struct event *event);
+
     /**
-     * \brief Function containing tasks to be performed during the transition
-     *
-     * The transition may optionally do some work in this function before
-     * entering the next state. May be NULL.
-     *
-     * \param state_current_data the leaving state's \ref state::data "data"
-     * \param event the event passed to the state machine.
-     * \param state_new_data the new state's (the \ref state::state_entry
-     * "state_entry" of any (chain of) parent states, not the parent state
-     * itself) \ref state::data "data"
+     * @brief 离开上一个状态，即将进入下一个状态，需要执行的函数
+     * 
+     * @param state_current_data    上一个状态中的data成员
+     * @param event                 触发事件
+     * @param state_new_data        下一个状态的data成员
+     * 
      */
-    void (*action)(void *state_current_data, struct event *event,
-                   void *state_new_data);
-    /**
-     * \brief The next state
-     *
-     * This must point to the next state that will be entered. It cannot be
-     * NULL. If it is, the state machine will detect it and enter the \ref
-     * state_machine::state_error "error state".
-     */
+    void (*action)(void *state_current_data, struct event *event, void *state_new_data);
+
+    // 下一个状态
+    // 这必须指向将要进入的下一个状态。 
+    // 它不能为 NULL。 如果是，状态机会检测到并进入\ref state_machine::state_error "error state"
     struct state *state_next;
 };
 
@@ -287,52 +254,28 @@ struct transition
  */
 struct state
 {
-    /**
-     * \brief If the state has a parent state, this pointer must be non-NULL.
-     */
+    // 如果状态有父状态，则此指针必须为非 NULL
     struct state *state_parent; // 复位状态，用于找不到对应的转换，就会返回复位状态
-    /**
-     * \brief If this state is a parent state, this pointer may point to a
-     * child state that serves as an entry point.
-     */
+    
+    // 如果该状态是父状态，则该指针可以指向用作入口点的子状态。
+    // 用于最初默认状态，如果不为NULL，则直接跳到state_entry指向的状态
+    // 入口状态，正常不应该存在，存在就会跳转进去
     struct state *state_entry;
-    /**
-     * \brief An array of transitions for the state.
-     */
+
+    // 状态转换数组
     struct transition *transitions;
-    /**
-     * \brief Number of transitions in the #transitions array.
-     */
+
+    // #transitions 数组中的转换数
     size_t transition_nums;
-    /**
-     * \brief Data that will be available for the state in its #action_entry and
-     * #action_exti, and in any \ref transition::action "transition action"
-     */
+
+    // 在其#action_entry 和#action_exti 以及任何\ref transition::action "transition action" 中可用于状态的数据
     void *data;
-    /**
-     * \brief This function is called whenever the state is being entered. May
-     * be NULL.
-     *
-     * \note If a state returns to itself through a transition (either directly
-     * or through a parent/group sate), its #action_entry will not be called.
-     *
-     * \note A group/parent state with its #state_entry defined will not have
-     * its #action_entry called.
-     *
-     * \param state_data the state's #data will be passed.
-     * \param event the event that triggered the transition will be passed.
-     */
+
+    // 进入该状态需要调用的函数接口，目标状态仍然是自身则不调用
+    // 定义了#state_entry 的组/父状态不会调用其#action_entry
     void (*action_entry)(void *state_data, struct event *event);
-    /**
-     * \brief This function is called whenever the state is being left. May be
-     * NULL.
-     *
-     * \note If a state returns to itself through a transition (either directly
-     * or through a parent/group sate), its #action_exti will not be called.
-     *
-     * \param state_data the state's #data will be passed.
-     * \param event the event that triggered a transition will be passed.
-     */
+
+    // 当前状态退出后的需要调用的函数，目标状态仍然是自身则不调用
     void (*action_exti)(void *state_data, struct event *event);
 };
 
@@ -343,22 +286,15 @@ struct state
  */
 struct state_machine
 {
-    /** \brief Pointer to the current state */
+    // 指向当前状态的指针
     struct state *state_current;
-    /**
-     * \brief Pointer to previous state
-     *
-     * The previous state is stored for convenience in case the user needs to
-     * keep track of previous states.
-     */
+
+    // 指向前一个状态的指针
+    // 为了方便用户需要跟踪以前的状态，存储以前的状态
     struct state *state_previous;
-    /**
-     * \brief Pointer to a state that will be entered whenever an error occurs
-     * in the state machine.
-     *
-     * See #STATEM_ERR_STATE_RECHED for when the state machine enters the
-     * error state.
-     */
+
+    // 指向在状态机中发生错误时将进入的状态的指针
+    // 有关状态机何时进入错误状态，请参阅#STATEM_ERR_STATE_RECHED
     struct state *state_error;
 };
 
@@ -415,7 +351,7 @@ enum statem_handle_event_return_vals
      * indirect path may inlude a transition from a parent state and the use of
      * \ref state::state_entry "state_entrys".
      */
-    STATEM_STATE_LOOPSELF,
+    STATEM_STATE_LOOPSELF,      // 两次转换后的状态相同
     /**
      * \brief The current state did not change on the given event
      *

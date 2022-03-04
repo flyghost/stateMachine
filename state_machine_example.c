@@ -1,25 +1,3 @@
-/*
- * Copyright (c) 2013 Andreas Misje
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- */
-
 #include <stdint.h>
 #include <stdio.h>
 #include "state_machine.h"
@@ -60,7 +38,7 @@ enum event_type
 
 /* Compare keyboard character from transition's condition variable against
  * data in event. */
-static bool keyboard_char_compare(void *ch, struct event *event);
+static bool Eventkey_guard(void *ch, struct event *event);
 
 static void print_msg_recognised_char(void *state_data, struct event *event);
 static void print_msg_unrecognised_char(void *oldstate_data, struct event *event,
@@ -79,25 +57,18 @@ static void print_msg_exit(void *state_data, struct event *event);
  * order: */
 static struct state state_charsgroup_check, state_idle, state_h, state_i, state_a;
 
-/* All the following states (apart from the error state) are children of this
- * group state. This way, any unrecognised character will be handled by this
- * state's transition, eliminating the need for adding the same transition to
- * all the children states. */
+// 以下所有状态（除了错误状态）都是该组状态的子状态。 这样，任何无法识别的字符都将由该状态的转换处理，从而无需将相同的转换添加到所有子状态。
 static struct state state_charsgroup_check = {
     .state_parent = NULL,
-    /* The entry state is defined in order to demontrate that the 'reset'
-     * transtition, going to this group state, will be 'redirected' to the
-     * 'idle' state (the transition could of course go directly to the 'idle'
-     * state): */
+    // 定义进入状态是为了证明进入该组状态的“重置”转换将被“重定向”到“空闲”状态（转换当然可以直接进入“空闲”状态）
     .state_entry = &state_idle,
     .transitions = (struct transition[]){
-        /* event_type       condition            guard                   action            nextstate      */
         {
-            EVENT_KEYBOARD,
-            (void *)(intptr_t)'!',
-            &keyboard_char_compare,
-            &print_msg_reset,
-            &state_idle,
+            EVENT_KEYBOARD,        // event_type: 事件类型
+            (void *)(intptr_t)'!', // condition:  转换条件
+            &Eventkey_guard,       // guard:      将上面两个值代入，检查是否满足转换条件
+            &print_msg_reset,      // action
+            &state_idle,           // state_next
         },
         {
             EVENT_KEYBOARD,
@@ -109,8 +80,8 @@ static struct state state_charsgroup_check = {
     },
     .transition_nums = 2,
     .data = "group",
-    .action_entry = &print_msg_enter,
-    .action_exti = &print_msg_exit,
+    .action_entry = &print_msg_enter, //
+    .action_exti = &print_msg_exit,   // 退出当前状态的操作
 };
 
 // idle״̬
@@ -118,8 +89,7 @@ static struct state state_idle = {
     .state_parent = &state_charsgroup_check,
     .state_entry = NULL,
     .transitions = (struct transition[]){
-        // �¼����͡�      �¼���                  �������ܷ�ת�ƣ���
-        {EVENT_KEYBOARD, (void *)(intptr_t)'h', &keyboard_char_compare, NULL, &state_h},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'h', &Eventkey_guard, NULL, &state_h},
     },
     .transition_nums = 1,
     .data = "idle",
@@ -127,13 +97,13 @@ static struct state state_idle = {
     .action_exti = &print_msg_exit,
 };
 
-// h ״̬
+// h：等待a和i事件参数
 static struct state state_h = {
     .state_parent = &state_charsgroup_check,
     .state_entry = NULL,
     .transitions = (struct transition[]){
-        {EVENT_KEYBOARD, (void *)(intptr_t)'a', &keyboard_char_compare, NULL, &state_a},
-        {EVENT_KEYBOARD, (void *)(intptr_t)'i', &keyboard_char_compare, NULL, &state_i},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'a', &Eventkey_guard, NULL, &state_a},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'i', &Eventkey_guard, NULL, &state_i},
     },
     .transition_nums = 2,
     .data = "H",
@@ -141,39 +111,39 @@ static struct state state_h = {
     .action_exti = &print_msg_exit,
 };
 
-// i ״̬
+// i：等待n事件参数
 static struct state state_i = {
     .state_parent = &state_charsgroup_check,
     .state_entry = NULL,
     .transitions = (struct transition[]){
-        {EVENT_KEYBOARD, (void *)(intptr_t)'n', &keyboard_char_compare, &print_msg_hi, &state_idle}},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'n', &Eventkey_guard, &print_msg_hi, &state_idle}},
     .transition_nums = 1,
     .data = "I",
     .action_entry = &print_msg_recognised_char,
     .action_exti = &print_msg_exit,
 };
 
-// a ״̬
+// a：等待n事件参数
 static struct state state_a = {
     .state_parent = &state_charsgroup_check,
     .state_entry = NULL,
     .transitions = (struct transition[]){
-        {EVENT_KEYBOARD, (void *)(intptr_t)'n', &keyboard_char_compare, &print_msg_ha, &state_idle}},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'n', &Eventkey_guard, &print_msg_ha, &state_idle}},
     .transition_nums = 1,
     .data = "A",
     .action_entry = &print_msg_recognised_char,
     .action_exti = &print_msg_exit};
 
-// error ״̬
+// error
 static struct state state_error = {
     .transitions = (struct transition[]){
-        {EVENT_KEYBOARD, (void *)(intptr_t)'i', &keyboard_char_compare, NULL, &state_i},
+        {EVENT_KEYBOARD, (void *)(intptr_t)'i', &Eventkey_guard, NULL, &state_i},
     },
     .transition_nums = 1,
     .data = "Error",
     .action_entry = &print_msg_err};
 
-static bool keyboard_char_compare(void *ch, struct event *event)
+static bool Eventkey_guard(void *ch, struct event *event)
 {
     if (event->type != EVENT_KEYBOARD)
     {

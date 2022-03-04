@@ -1,32 +1,17 @@
-/*
- * Copyright (c) 2013 Andreas Misje
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- */
-
 #include "state_machine.h"
 
 static void go_to_state_error(struct state_machine *state_machine, struct event *const event);
 static struct transition *get_transition(struct state_machine *state_machine, struct state *state, struct event *const event);
 
-int statem_init(struct state_machine *fsm,
-                struct state *state_init, struct state *state_error)
+/**
+ * @brief 初始化状态机
+ * 
+ * @param fsm           状态机
+ * @param state_init    初始状态
+ * @param state_error   错误状态
+ * @return int          0：成功   -1：失败
+ */
+int statem_init(struct state_machine *fsm, struct state *state_init, struct state *state_error)
 {
     if (!fsm)
     {
@@ -41,7 +26,9 @@ int statem_init(struct state_machine *fsm,
 }
 
 /**
- * @brief
+ * @brief 状态机处理事件
+ * 
+ * 回调函数执行顺序：action_exti--->action--->action_entry
  *
  * @param fsm       状态机
  * @param event     事件
@@ -54,13 +41,15 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
         return STATEM_ERR_ARG;
     }
 
-    if (!fsm->state_current)
+    if (!fsm->state_current)    // 当前状态为空，错误
     {
         go_to_state_error(fsm, event);
         return STATEM_ERR_STATE_RECHED;
     }
 
     /* 如果这个状态没有儿子，不用转移了,那他自己是儿子吗 */
+
+    // 没有转换函数 且
     if ((!fsm->state_current->transition_nums) && (!fsm->state_current->state_parent))
     {
         return STATEM_STATE_NOCHANGE;
@@ -70,12 +59,10 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
 
     do
     {
+        // 查找是否有满足条件的转换函数
         struct transition *transition = get_transition(fsm, state_next, event); // 根据当前状态，事件，得到转化函数（里面执行了gard函数，判断了转换条件）
 
-        /* If there were no transitions for the given event for the current
-         * state, check if there are any transitions for any of the parent
-         * states (if any): */
-        /*  continue并不会跳过while的条件判断 */
+        // 如果当前状态的给定事件没有转换，请检查是否有任何父状态的转换（如果有）：
         // 如果没有转移函数，则跳到上一个状态
         if (!transition)
         {
@@ -90,54 +77,54 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
             return STATEM_ERR_STATE_RECHED;
         }
 
+        // 存在转移函数，转到目标状态
         state_next = transition->state_next;
 
-        /* If the new state is a parent state, enter its entry state (if it has
-         * one). Step down through the whole family tree until a state without
-         * an entry state is found: */
+        // 如果新状态是父状态，则进入其入口状态（如果有的话）。 向下遍历整个家族树，直到找到没有入口状态的状态
         while (state_next->state_entry)
         {
             state_next = state_next->state_entry;
         }
 
-        /* Run exit action only if the current state is left (only if it does
-         * not return to itself): */
-        if (state_next != fsm->state_current && fsm->state_current->action_exti)
+        // 运行到这里，目标状态已经找到，开始执行退出函数
+
+        // 离开上一个状态
+        if (state_next != fsm->state_current && fsm->state_current->action_exti)        // 目标状态和当前状态不同， 且存在退出函数
         {
             fsm->state_current->action_exti(fsm->state_current->data, event);
         }
 
-        /* Run transition action (if any): */
+        // 执行转换函数
         if (transition->action)
         {
             transition->action(fsm->state_current->data, event, state_next->data);
         }
 
+        // 保存上一个状态
         fsm->state_previous = fsm->state_current;
 
-        /* Call the new state's entry action if it has any (only if state does
-         * not return to itself): */
-        if (state_next != fsm->state_current && state_next->action_entry)
+        // 执行新状态的入口函数
+        if (state_next != fsm->state_current && state_next->action_entry)               // 目标状态和当前状态不同，且存在入口函数
         {
             state_next->action_entry(state_next->data, event);
         }
 
+        // 更新状态
         fsm->state_current = state_next;
 
-        /* If the state returned to itself: */
+        // 当前转换是自身状态转换
         if (fsm->state_current == fsm->state_previous)
         {
             return STATEM_STATE_LOOPSELF;
         }
 
+        // 当前状态是错误状态
         if (fsm->state_current == fsm->state_error)
         {
             return STATEM_ERR_STATE_RECHED;
         }
 
-        /* If the new state is a final state, notify user that the state
-         * machine has stopped: */
-        /* 下一个状态没有儿子,也没有父亲，你们家只有你了 */
+        // 当前状态没有转换函数，也没有父状态，状态机停止，无法进行下一次转换
         if ((!fsm->state_current->transition_nums) && (!fsm->state_current->state_parent))
         {
             return STATEM_FINAL_STATE_RECHED;
@@ -149,6 +136,7 @@ int statem_handle_event(struct state_machine *fsm, struct event *event)
     return STATEM_STATE_NOCHANGE;
 }
 
+// 当前状态
 struct state *statem_state_current(struct state_machine *fsm)
 {
     if (!fsm)
@@ -159,6 +147,7 @@ struct state *statem_state_current(struct state_machine *fsm)
     return fsm->state_current;
 }
 
+// 上一个状态
 struct state *statem_state_previous(struct state_machine *fsm)
 {
     if (!fsm)
@@ -169,6 +158,7 @@ struct state *statem_state_previous(struct state_machine *fsm)
     return fsm->state_previous;
 }
 
+// 进入错误状态
 static void go_to_state_error(struct state_machine *fsm,
                               struct event *const event)
 {
@@ -183,8 +173,15 @@ static void go_to_state_error(struct state_machine *fsm,
 }
 
 // 状态、事件下对应着多个目标状态，需要根据条件判断走哪个状态
-static struct transition *get_transition(struct state_machine *fsm,
-                                         struct state *state, struct event *const event)
+/**
+ * @brief Get the transition object
+ * 
+ * @param fsm           状态机
+ * @param state         
+ * @param event 
+ * @return struct transition* 
+ */
+static struct transition *get_transition(struct state_machine *fsm, struct state *state, struct event *const event)
 {
     size_t i;
 
@@ -193,25 +190,21 @@ static struct transition *get_transition(struct state_machine *fsm,
         return NULL;
     }
 
+    // 循环所有的转换函数
     for (i = 0; i < state->transition_nums; ++i)
     {
         struct transition *t = &state->transitions[i];
 
         /* A transition for the given event has been found: */
-        // 查找当前状态下的事件
+        // 确保事件类型是相同的
         if (t->event_type == event->type)
         {
-            /* 轮询监视，如果没有监视，或者监视测试通过返回这个转移
-             * 监视输入条件和事件，可以做成当前转移的条件要和事件的数据吻合
-             * 也可以做成当前条件要符合什么，事件的数据参数要符合什么
-             */
-            // 一个状态一个事件，即可触发转化
+            // 事件类型相同就可以转换
             if (!t->guard)
             {
                 return t;
             }
-            /* If transition is guarded, ensure that the condition is held: */
-            // 一个状态、一个事件，还得满足条件才能转化
+            // 条件是否满足，满足才可以转换
             else if (t->guard(t->condition, event))
             {
                 return t;
